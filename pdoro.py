@@ -10,11 +10,99 @@ import signal
 import argparse
 from typing import Dict
 import os
+import json
+from pathlib import Path
+from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, BarColumn, TextColumn, MofNCompleteColumn
 from rich.text import Text
 from rich.align import Align
+
+class StatsManager:
+    """Manage usage statistics for pdoro."""
+    
+    def __init__(self):
+        self.stats_dir = Path.home() / ".local" / "share" / "pdoro"
+        self.stats_file = self.stats_dir / "stats.json"
+        self._ensure_stats_dir()
+    
+    def _ensure_stats_dir(self):
+        """Create stats directory if it doesn't exist."""
+        self.stats_dir.mkdir(parents=True, exist_ok=True)
+    
+    def get_today(self) -> str:
+        """Get today's date as string (YYYY-MM-DD)."""
+        return datetime.now().strftime("%Y-%m-%d")
+    
+    def load_stats(self) -> Dict:
+        """Load stats from file."""
+        if self.stats_file.exists():
+            try:
+                with open(self.stats_file, 'r') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                return self._default_stats()
+        return self._default_stats()
+    
+    def _default_stats(self) -> Dict:
+        """Return default stats structure."""
+        return {
+            "total_sessions": 0,
+            "work_sessions": 0,
+            "break_sessions": 0,
+            "daily": {}
+        }
+    
+    def save_stats(self, stats: Dict):
+        """Save stats to file."""
+        try:
+            with open(self.stats_file, 'w') as f:
+                json.dump(stats, f, indent=2)
+        except IOError as e:
+            print(f"Warning: Could not save stats: {e}")
+    
+    def get_today_stats(self) -> Dict:
+        """Get stats for today."""
+        stats = self.load_stats()
+        today = self.get_today()
+        
+        if today not in stats["daily"]:
+            stats["daily"][today] = {
+                "total": 0,
+                "work": 0,
+                "break": 0
+            }
+        
+        return stats["daily"][today]
+    
+    def increment_session(self, session_type: str):
+        """Increment counter for a completed session."""
+        stats = self.load_stats()
+        today = self.get_today()
+        
+        # Update total stats
+        stats["total_sessions"] += 1
+        if session_type in ["work", "break"]:
+            stats[f"{session_type}_sessions"] += 1
+        
+        # Update daily stats
+        if today not in stats["daily"]:
+            stats["daily"][today] = {
+                "total": 0,
+                "work": 0,
+                "break": 0
+            }
+        
+        stats["daily"][today]["total"] += 1
+        if session_type in ["work", "break"]:
+            stats["daily"][today][session_type] += 1
+        
+        self.save_stats(stats)
+    
+    def get_stats(self) -> Dict:
+        """Get current stats."""
+        return self.load_stats()
 
 class PomodorTimer:
     """A cool Pomodoro timer with visual progress bar."""
@@ -34,6 +122,7 @@ class PomodorTimer:
         self.session_type = None
         self.duration = 0
         self.console = Console()
+        self.stats_manager = StatsManager()
     
     def format_time(self, seconds: int) -> str:
         """Convert seconds to MM:SS format."""
@@ -47,6 +136,7 @@ class PomodorTimer:
             self.console.print(f"[cyan]Available: {', '.join(self.SESSIONS.keys())}[/cyan]")
             sys.exit(1)
         
+        self.session_type = session_type
         duration_minutes = self.SESSIONS[session_type]
         duration_seconds = duration_minutes * 60
         
@@ -59,6 +149,10 @@ class PomodorTimer:
             padding=(1, 2),
         )
         self.console.print(panel)
+        
+        # Show today's stats
+        today_stats = self.stats_manager.get_today_stats()
+        self.console.print(f"[cyan]📊 Heute: {today_stats['total']} Sessions ([yellow]{today_stats['work']}[/yellow] Arbeit, [green]{today_stats['break']}[/green] Pause)[/cyan]\n")
         
         self.console.print(f"[bold]⏱️  Dauer:[/bold] {duration_minutes} Minuten")
         self.console.print(f"[yellow]⚠️  Drücke CTRL+C zum Beenden[/yellow]\n")
@@ -111,8 +205,11 @@ class PomodorTimer:
         )
         self.console.print("\n")
         self.console.print(complete_panel)
-        self.console.print("[bold green]🎉 Glückwunsch![/bold green]\n")
-
+        self.console.print("[bold green]🎉 Glückwunsch![/bold green]\n")        
+        # Increment and display stats
+        self.stats_manager.increment_session(self.session_type)
+        today_stats = self.stats_manager.get_today_stats()
+        self.console.print(f"[cyan]📊 Heute insgesamt: {today_stats['total']} Sessions ([yellow]{today_stats['work']}[/yellow] Arbeit, [green]{today_stats['break']}[/green] Pause)[/cyan]\n")
 
 def main():
     """Main entry point with argument parser."""
@@ -151,6 +248,12 @@ Examples:
         help="List all available sessions"
     )
     
+    parser.add_argument(
+        "-s", "--stats",
+        action="store_true",
+        help="Show usage statistics"
+    )
+    
     args = parser.parse_args()
     
     timer = PomodorTimer()
@@ -162,6 +265,23 @@ Examples:
             emoji = timer.EMOJIS.get(session, '⏱️')
             timer.console.print(f"  [cyan]•[/cyan] [yellow]{session}[/yellow]: {duration} minutes {emoji}")
         timer.console.print()
+        sys.exit(0)
+    
+    # Show statistics
+    if args.stats:
+        stats = timer.stats_manager.get_stats()
+        today_stats = timer.stats_manager.get_today_stats()
+        today = timer.stats_manager.get_today()
+        
+        timer.console.print("\n[bold cyan]📊 Pomodoro Statistics[/bold cyan]")
+        timer.console.print(f"  [bold]{today}[/bold]")
+        timer.console.print(f"    [cyan]Sessions:[/cyan] {today_stats['total']}")
+        timer.console.print(f"    [yellow]Work:[/yellow] {today_stats['work']}")
+        timer.console.print(f"    [green]Break:[/green] {today_stats['break']}")
+        timer.console.print(f"\n  [bold]All Time[/bold]")
+        timer.console.print(f"    [cyan]Total Sessions:[/cyan] {stats['total_sessions']}")
+        timer.console.print(f"    [yellow]Work Sessions:[/yellow] {stats.get('work_sessions', 0)}")
+        timer.console.print(f"    [green]Break Sessions:[/green] {stats.get('break_sessions', 0)}\n")
         sys.exit(0)
     
     # Check if session is provided

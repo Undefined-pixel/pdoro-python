@@ -13,7 +13,8 @@ Gebaut mit der [**Rich**](https://github.com/Textualize/rich) Bibliothek für ei
 - ⌨️ Jederzeit mit CTRL+C abbrechbar
 - 🎯 Vordefinierte Sessions (work, break)
 - 🛠️ Custom Sessions mit beliebigem Namen und Dauer
-- 📝 Integrierte Help mit Beispielen
+- � **Statistiken & Tracking** - Verfolge deine täglichen und gesamten Sessions
+- �📝 Integrierte Help mit Beispielen
 - 🔧 Einfache Automatische Installation mit Abhängigkeiten
 
 ## Installation
@@ -69,6 +70,9 @@ pdoro gym -d 60          # 60 Min Gym Session
 # Alle verfügbaren Sessions anzeigen
 pdoro --list
 
+# Statistiken anzeigen
+pdoro --stats            # Zeige tägliche und gesamte Statistiken
+
 # Hilfe anzeigen
 pdoro -h
 ```
@@ -80,6 +84,7 @@ Die Ausgabe zeigt:
 - 📊 Eine Live Progress-Bar mit Balkendarstellung
 - ⏱️ Die verbleibende Zeit in MM:SS Format
 - 🚀 Animierte Fortschrittsanzeige
+- 📊 Deine Statistiken für heute (Sessions zu Anfang und Ende)
 
 Beispiel während der Ausführung:
 ```
@@ -88,6 +93,7 @@ Beispiel während der Ausführung:
 │                              ☕  BREAK SESSION                               │
 │                                                                              │
 ╰─────────────────────────────────────────────────────────────────────────────╯
+📊 Heute: 2 Sessions (1 Arbeit, 1 Pause)
 ⏱️  Dauer: 3 Minuten
 ⚠️  Drücke CTRL+C zum Beenden
 
@@ -149,6 +155,24 @@ Available Sessions:
 │                                                                              │
 ╰─────────────────────────────────────────────────────────────────────────────╯
 🎉 Glückwunsch!
+
+📊 Heute insgesamt: 3 Sessions (2 Arbeit, 1 Pause)
+```
+
+### Beispiel 5: Statistiken anzeigen
+```bash
+$ pdoro --stats
+
+📊 Pomodoro Statistics
+  2026-03-14
+    Sessions: 3
+    Work: 2
+    Break: 1
+
+  All Time
+    Total Sessions: 42
+    Work Sessions: 28
+    Break Sessions: 14
 ```
 
 ## Vordefinierte Sessions
@@ -161,7 +185,7 @@ Available Sessions:
 ## Optionen
 
 ```
-usage: pdoro [-h] [-d MINUTES] [-l] SESSION
+usage: pdoro [-h] [-d MINUTES] [-l] [-s] SESSION
 
 positional arguments:
   SESSION               Session type (work, break) oder beliebiger Sessionname
@@ -171,6 +195,7 @@ optional arguments:
   -d MINUTES, --duration MINUTES
                         Setzt custom Dauer in Minuten
   -l, --list            Zeigt alle verfügbaren Sessions an
+  -s, --stats           Zeigt Statistiken für heute und alle Zeit
 ```
 
 ## Dateien
@@ -188,10 +213,17 @@ optional arguments:
 Die Hauptanwendung mit folgenden Komponenten:
 
 ```python
+class StatsManager:
+    - load_stats()         # Lädt Statistiken aus Datei
+    - save_stats()         # Speichert Statistiken
+    - increment_session()  # Zählt Session hoch
+    - get_today_stats()    # Gibt heute's Statistiken
+    
 class PomodorTimer:
     - SESSIONS: Dictionary mit vordefinierter Sessions
     - EMOJIS: Session-spezifische Emojis
     - console: Rich Console für schöne Ausgabe
+    - stats_manager: StatsManager Instanz
     - Rich Panel: Elegante Rahmen um Session-Info
     - Rich Progress: Animierte Progress Bar mit Countdown
     
@@ -207,6 +239,23 @@ Das Installationsskript:
 - 🔗 Erstellt einen ausführbaren Wrapper
 - 🔐 Setzt korrekte Permissions
 - ✅ Prüft PATH-Konfiguration
+
+### Statistiken
+Die Statistiken werden in `~/.local/share/pdoro/stats.json` gespeichert:
+```json
+{
+  "total_sessions": 42,
+  "work_sessions": 28,
+  "break_sessions": 14,
+  "daily": {
+    "2026-03-14": {
+      "total": 3,
+      "work": 2,
+      "break": 1
+    }
+  }
+}
+```
 
 ## Tipps & Tricks
 
