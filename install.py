@@ -9,6 +9,7 @@ import sys
 import shutil
 import stat
 import subprocess
+import venv
 from pathlib import Path
 
 class PodoroInstaller:
@@ -17,6 +18,7 @@ class PodoroInstaller:
     def __init__(self):
         self.script_dir = Path(__file__).parent
         self.pdoro_py = self.script_dir / "pdoro.py"
+        self.venv_dir = self.script_dir / ".venv"
         self.home = Path.home()
         self.local_bin = self.home / ".local" / "bin"
         self.pdoro_link = self.local_bin / "pdoro"
@@ -87,8 +89,9 @@ class PodoroInstaller:
         """Create pdoro executable wrapper."""
         self.print_info(f"Creating pdoro executable...")
         
-        # Create wrapper script
-        wrapper_content = f"""#!/usr/bin/env python3
+        # Create wrapper script that uses the venv's Python
+        venv_python = self.get_venv_python()
+        wrapper_content = f"""#!{venv_python}
 import sys
 import os
 os.chdir("{self.script_dir}")
@@ -112,40 +115,60 @@ if __name__ == "__main__":
             self.print_error(f"Failed to create executable: {e}")
             return False
     
-    def install_dependencies(self) -> bool:
-        """Install required Python packages."""
-        self.print_info("Installing required packages...")
+    def create_venv(self) -> bool:
+        """Create a virtual environment in the project directory."""
+        self.print_info(f"Creating virtual environment at {self.venv_dir}...")
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "rich", "-q"])
-            self.print_success("Required packages installed")
+            venv.create(self.venv_dir, with_pip=True)
+            self.print_success("Virtual environment created")
+            return True
+        except Exception as e:
+            self.print_error(f"Failed to create virtual environment: {e}")
+            return False
+
+    def get_venv_python(self) -> Path:
+        """Get the path to the venv's Python executable."""
+        return self.venv_dir / "bin" / "python"
+
+    def install_dependencies(self) -> bool:
+        """Install required Python packages into the venv."""
+        self.print_info("Installing required packages into venv...")
+        try:
+            venv_pip = self.venv_dir / "bin" / "pip"
+            subprocess.check_call([str(venv_pip), "install", "rich", "-q"])
+            self.print_success("Required packages installed in venv")
             return True
         except Exception as e:
             self.print_warning(f"Failed to install packages: {e}")
             self.print_info("You may need to install 'rich' manually:")
-            print(f"  {self.YELLOW}pip install rich{self.RESET}")
+            print(f"  {self.YELLOW}{self.venv_dir}/bin/pip install rich{self.RESET}")
             return False
     
     def install(self):
         """Run the installation process."""
         self.print_header("🍅 Pomodoro Timer Installation")
         
-        # Step 0: Install dependencies
+        # Step 0: Create virtual environment
+        if not self.create_venv():
+            return False
+
+        # Step 1: Install dependencies into venv
         if not self.install_dependencies():
             return False
-        
-        # Step 1: Check pdoro.py
+
+        # Step 2: Check pdoro.py
         if not self.check_pdoro_file():
             return False
         
-        # Step 2: Create ~/.local/bin
+        # Step 3: Create ~/.local/bin
         if not self.create_local_bin():
             return False
-        
-        # Step 3: Create executable
+
+        # Step 4: Create executable
         if not self.create_pdoro_executable():
             return False
-        
-        # Step 4: Check PATH
+
+        # Step 5: Check PATH
         path_ok = self.check_path_env()
         
         # Summary
